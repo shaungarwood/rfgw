@@ -1,22 +1,21 @@
+# frozen_string_literal: true
+
 class RFGW
   def get_version
-    res = @agent.get(@base_url + '/download/download.cgi?FW_VERSION&Read')
-    vals = res.body.split("&")
+    res = @agent.get("#{@base_url}/download/download.cgi?FW_VERSION&Read")
+    vals = res.body.split('&')
 
-    if vals.size == 3
-      keys = [:ip, :active_release, :inactive_release]
-      return Hash[keys.zip(vals)]
-    else
-      raise "Unexcpted response - #{res.code}: #{res.body}"
-    end
+    raise "Unexcpted response - #{res.code}: #{res.body}" unless vals.size == 3
+
+    keys = %i[ip active_release inactive_release]
+    Hash[keys.zip(vals)]
   end
 
   def get_download(whatever)
-    url = @base_url + '/download/download.cgi?'
+    url = "#{@base_url}/download/download.cgi?"
     url << whatever.join('&')
     res = @agent.get(url)
-    data = res.body.split('&')
-    return data
+    res.body.split('&')
   end
 
   def get_ftp_server
@@ -25,8 +24,9 @@ class RFGW
     ftp = {}
     # data[0] this is just the rfgw ip, i think
     ftp[:server] = data[1]
-    ftp[:user], ftp[:pass] = data[2], data[3]
-    return ftp
+    ftp[:user] = data[2]
+    ftp[:pass] = data[3]
+    ftp
   end
 
   def test_ftp(ip, user, pass)
@@ -41,7 +41,7 @@ class RFGW
     lastb[:saved_date]      = data[1]
     lastb[:backup_filename] = data[2]
     lastb[:backup_date]     = data[3]
-    return lastb
+    lastb
   end
 
   def get_next_backup
@@ -50,6 +50,6 @@ class RFGW
     nextb = {}
     nextb[:path] = data[1]
     nextb[:file] = data[5]
-    return nextb
+    nextb
   end
 end

@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require 'mechanize'
 
 require_relative 'rfgw/system'
@@ -10,7 +12,7 @@ class RFGW
 
     @agent = Mechanize.new
     @agent.idle_timeout = nil
-    @agent.read_timeout = 100000
+    @agent.read_timeout = 100_000
     @agent.user_agent_alias = 'Windows Mozilla'
     @agent.redirect_ok = true
   end

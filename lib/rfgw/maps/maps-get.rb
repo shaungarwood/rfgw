@@ -1,17 +1,20 @@
+# frozen_string_literal: true
+
 class RFGW
   require_relative 'maps-post'
 
   # not sure what happens with single stream or no streams on channel, check it out
-  def get_raw_stream_map(start_channel, end_channel=start_channel)
+  def get_raw_stream_map(start_channel, end_channel = start_channel)
     query = ['GET', start_channel.to_s, end_channel.to_s, 0, 0]
     streams = get_stream(query)
 
     while streams[-1][0] == 'cur_row'
-      cur_row, stream_index = streams[-1][1], streams[-1][3]
+      cur_row = streams[-1][1]
+      stream_index = streams[-1][3]
       streams.pop
       query = ['GET', start_channel, end_channel, cur_row, stream_index]
       res = get_stream(query)
-      res.each{|row| streams << row}
+      res.each { |row| streams << row }
       streams.delete(['end'])
     end
     streams.delete(['end']) # even better way to handle no pagination
@@ -19,7 +22,7 @@ class RFGW
     streams
   end
 
-  def get_stream_map(start_channel, end_channel=start_channel)
+  def get_stream_map(start_channel, end_channel = start_channel)
     streams = get_raw_stream_map(start_channel, end_channel)
     parsed = []
     streams.each do |stream|
@@ -30,20 +33,19 @@ class RFGW
   end
 
   def get_stream(params)
-    url = @base_url + '/stream/stream.cgi?'
+    url = "#{@base_url}/stream/stream.cgi?"
     url << params.join('&')
 
     res = @agent.get(url)
     data = res.body.split('&')
-    data.map!{|e| e.split(',')}
+    data.map! { |e| e.split(',') }
   end
 
   # my own method to create a human-readable hash
   # necessary for making adding/manipulating much easier
   def parse_stream(row)
-    if row.size < 22
-      raise "row doesn't look right for parsing: #{row}"
-    end
+    raise "row doesn't look right for parsing: #{row}" if row.size < 22
+
     parsed_row = {}
 
     # base (top row in gui)
@@ -61,22 +63,22 @@ class RFGW
     parsed_row[:pmv]          = row[9]
     parsed_row[:data_rate]    = row[10]
     parsed_row[:psipeas_pres] = map_to_string(row[19], :psip_eas)
-    
+
     # advanced (bottom row in gui)
     parsed_row[:source_primary]    = row[11]
     parsed_row[:source_secondary]  = row[12]
     parsed_row[:source_tertiary]   = row[13]
     parsed_row[:source_quaternary] = row[14]
-    
+
     parsed_row[:ignore_udp] = map_to_string(row[15], :udp_to_str)
     parsed_row[:prc]        = map_to_string(row[16], :pcr_to_str)
     parsed_row[:mpts_mode]  = map_to_string(row[17], :mode_to_str)
     parsed_row[:mpts_ref]   = row[18]
     parsed_row[:blocked_pids_size] = row[20] # not necessary or in GUI
-                                           # but it was the only one missing
+    # but it was the only one missing
     parsed_row[:blocked_pids] = row[21..-2].join(',')
 
-    return parsed_row
+    parsed_row
   end
 
   # this is taking my custom hash i've created
@@ -118,20 +120,22 @@ class RFGW
   def display_channel(chn)
     chn = chn.to_i
     offset = chn % 16
-    cardId = (chn-offset)/16 + 1
+    cardId = (chn - offset) / 16 + 1
     chnId = offset % 8
-    portId = (offset-chnId)/8 + 1
+    portId = (offset - chnId) / 8 + 1
     chnId += 1
 
-    cardId.to_s + "/" + portId.to_s + "." + chnId.to_s
+    "#{cardId}/#{portId}.#{chnId}"
   end
 
   def raw_channel(display_channel)
-    unless display_channel =~ /^(\d+)\/(\d+)\.(\d+)$/
+    unless display_channel =~ %r{^(\d+)/(\d+)\.(\d+)$}
       raise "I do not know how to handle input channel: #{display_channel}"
     end
 
-    cardId, portId, chnId = $1.to_i, $2.to_i, $3.to_i
+    cardId = ::Regexp.last_match(1).to_i
+    portId = ::Regexp.last_match(2).to_i
+    chnId = ::Regexp.last_match(3).to_i
 
     offset = (portId - 1) * 8
     offset += chnId - 1
@@ -144,18 +148,18 @@ class RFGW
 
   def convert_to_display_channel(channel)
     if channel.to_s =~ /^\d+$/
-      return display_channel(channel)
-    elsif channel =~ /^(\d+)\/(\d+)\.(\d+)$/
-      return channel
+      display_channel(channel)
+    elsif channel =~ %r{^(\d+)/(\d+)\.(\d+)$}
+      channel
     end
   end
 
   def convert_to_raw_channel(channel)
     channel = channel.to_s
-    if channel =~ /^(\d+)\/(\d+)\.(\d+)$/
-      return raw_channel(channel)
+    if channel =~ %r{^(\d+)/(\d+)\.(\d+)$}
+      raw_channel(channel)
     elsif channel =~ /^\d+$/
-      return channel
+      channel
     end
   end
 
@@ -163,88 +167,87 @@ class RFGW
     cell_key = cell_key.to_s
     field_hash = TABLE_MAPPING[table_key]
 
-    field_hash.has_key?(cell_key) ? field_hash[cell_key] : 'Unknown'
+    field_hash.key?(cell_key) ? field_hash[cell_key] : 'Unknown'
   end
 
   def string_to_map(field_value, table_key)
     field_hash = TABLE_MAPPING[table_key]
-    matches = field_hash.select{|k,v| v == field_value}
-    unless matches.empty? || matches.size != 1
-      return matches.keys.first
-    end
+    matches = field_hash.select { |_k, v| v == field_value }
+    return matches.keys.first unless matches.empty? || matches.size != 1
 
     raise "could not reverse string to map #{field_value} for #{table_key}"
   end
 
   # more for documentation purposes
-  DEFAULT_RAW_STREAM = ["0", "0", "0.0.0.0", "00000", "1", "3", "1", "0", "1", "0", "0", "0.0.0.0", "0.0.0.0", "0.0.0.0", "0.0.0.0", "2", "1", "1", "0", "1", "32", "0", "8191", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "-1", "0"]
+  DEFAULT_RAW_STREAM = ['0', '0', '0.0.0.0', '00000', '1', '3', '1', '0', '1', '0', '0', '0.0.0.0', '0.0.0.0',
+                        '0.0.0.0', '0.0.0.0', '2', '1', '1', '0', '1', '32', '0', '8191', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '-1', '0'].freeze
 
   DEFAULT_PARSED_STREAM = {
-    :row_num=>"0",
-    :stream_index=>"0",
-    :channel=>"0",
-    :display_channel=>"1/1.1",
-    :destination_ip=>"0.0.0.0",
-    :udp_port=>"00000",
-    :active=>"True",
-    :port=>"Pair-1",
-    :type=>"SPTS",
-    :program_in=>"0",
-    :program_out=>"1",
-    :pmv=>"0",
-    :data_rate=>"0",
-    :psipeas_pres=>"None",
-    :source_primary=>"0.0.0.0",
-    :source_secondary=>"0.0.0.0",
-    :source_tertiary=>"0.0.0.0",
-    :source_quaternary=>"0.0.0.0",
-    :ignore_udp=>"False",
-    :prc=>"From PMT",
-    :mpts_mode=>"Break Into SPTS",
-    :mpts_ref=>"0",
-    :blocked_pids_size=>"32",
-    :blocked_pids=> "0,8191,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1"
-  }
+    row_num: '0',
+    stream_index: '0',
+    channel: '0',
+    display_channel: '1/1.1',
+    destination_ip: '0.0.0.0',
+    udp_port: '00000',
+    active: 'True',
+    port: 'Pair-1',
+    type: 'SPTS',
+    program_in: '0',
+    program_out: '1',
+    pmv: '0',
+    data_rate: '0',
+    psipeas_pres: 'None',
+    source_primary: '0.0.0.0',
+    source_secondary: '0.0.0.0',
+    source_tertiary: '0.0.0.0',
+    source_quaternary: '0.0.0.0',
+    ignore_udp: 'False',
+    prc: 'From PMT',
+    mpts_mode: 'Break Into SPTS',
+    mpts_ref: '0',
+    blocked_pids_size: '32',
+    blocked_pids: '0,8191,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1'
+  }.freeze
 
   TABLE_MAPPING = {
     # base table
-    :active_to_string => {
+    active_to_string: {
       '1' => 'True',
       '2' => 'False',
       '50' => 'Delete'
     },
-    :port_to_string => {
-      '3'  => 'Pair-1',
+    port_to_string: {
+      '3' => 'Pair-1',
       '12' => 'Pair-2',
-      '1'  => 'Port-1',
-      '2'  => 'Port-2',
-      '4'  => 'Port-3',
-      '8'  => 'Port-4'
+      '1' => 'Port-1',
+      '2' => 'Port-2',
+      '4' => 'Port-3',
+      '8' => 'Port-4'
     },
-    :stream_type => {
+    stream_type: {
       '1' => 'SPTS',
       '2' => 'MPTS',
       '3' => 'Plant',
       '4' => 'Data'
     },
-    :psip_eas => {
+    psip_eas: {
       '1' => 'None',
       '2' => 'PSIP',
       '3' => 'EAS'
     },
-    
+
     # advanced
-    :udp_to_str => {
+    udp_to_str: {
       '1' => 'True',
       '2' => 'False'
     },
-    :pcr_to_str => {
+    pcr_to_str: {
       '1' => 'From PMT',
       '2' => 'First Detected'
     },
-    :mode_to_str => {
+    mode_to_str: {
       '1' => 'Break Into SPTS',
       '2' => 'One Stream'
     }
-  }
+  }.freeze
 end
