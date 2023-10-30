@@ -1,0 +1,14 @@
+.DStore
+/.bundle/
+/.yardoc
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/rpm/
+/spec/reports/
+/tmp/
+*.swp
+.sonar
+*.gem
+.idea
